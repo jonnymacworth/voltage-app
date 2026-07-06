@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Voltage</title>
+<meta name="theme-color" content="#0B0C0F" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Voltage" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="style.css?v=5" />
+</head>
+<body>
+
+<header class="topbar">
+  <h1 id="topbar-title">Voltage<span class="topbar-dot">.</span></h1>
+</header>
+
+<main id="app"></main>
+
+<nav class="tabbar">
+  <button class="tab" data-route="#/today">
+    <span class="tab-icon">●</span><span>Today</span>
+  </button>
+  <button class="tab" data-route="#/schedule">
+    <span class="tab-icon">▤</span><span>Schedule</span>
+  </button>
+  <button class="tab" data-route="#/history">
+    <span class="tab-icon">✓</span><span>History</span>
+  </button>
+</nav>
+
+<script src="program-data.js?v=4"></script>
+<script src="app.js?v=5"></script>
+</body>
+</html>
