@@ -1,4 +1,4 @@
-const CACHE_NAME = "jw-cache-v8";
+const CACHE_NAME = "jw-cache-v9";
 const ASSETS = [
   "./",
   "./index.html",
@@ -6,15 +6,21 @@ const ASSETS = [
   "./app.js?v=5",
   "./program-data.js?v=4",
   "./manifest.json",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/apple-touch-icon.png",
+  "./icons/icon-192.png?v=2",
+  "./icons/icon-512.png?v=2",
+  "./icons/apple-touch-icon.png?v=2",
   "./images/hero-athlete.jpg",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then((cache) =>
+        Promise.all(ASSETS.map((url) =>
+          fetch(url, { cache: "reload" }).then((response) => cache.put(url, response))
+        ))
+      )
+      .then(() => self.skipWaiting())
   );
 });
 
