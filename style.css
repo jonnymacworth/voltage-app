@@ -54,6 +54,16 @@ h1, h2, h3, p { margin: 0; }
   text-transform: uppercase;
 }
 .topbar-dot, .accent-dot { color: var(--accent); }
+.topbar-settings {
+  position: absolute;
+  right: 16px;
+  top: calc(50% + var(--safe-top) / 2);
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 18px;
+  text-decoration: none;
+  line-height: 1;
+}
 
 .tabbar {
   position: fixed;

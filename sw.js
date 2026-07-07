@@ -1,9 +1,9 @@
-const CACHE_NAME = "jw-cache-v9";
+const CACHE_NAME = "jw-cache-v10";
 const ASSETS = [
   "./",
   "./index.html",
-  "./style.css?v=5",
-  "./app.js?v=5",
+  "./style.css?v=6",
+  "./app.js?v=6",
   "./program-data.js?v=4",
   "./manifest.json",
   "./icons/icon-192.png?v=2",
@@ -34,6 +34,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)

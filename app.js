@@ -26,6 +26,81 @@
     return !!getLogs()[id];
   }
 
+  // ---------- cloud sync (private GitHub repo) ----------
+  const GH_OWNER = "jonnymacworth";
+  const GH_REPO = "voltage-data";
+  const GH_PATH = "logs.json";
+  const GH_TOKEN_KEY = "jw_gh_token";
+  const LAST_SYNCED_KEY = "jw_last_synced";
+
+  function getGhToken() {
+    return localStorage.getItem(GH_TOKEN_KEY) || "";
+  }
+  function setGhToken(token) {
+    if (token) localStorage.setItem(GH_TOKEN_KEY, token);
+    else localStorage.removeItem(GH_TOKEN_KEY);
+  }
+  function utf8ToBase64(str) {
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+  function base64ToUtf8(b64) {
+    return decodeURIComponent(escape(atob(b64.replace(/\n/g, ""))));
+  }
+  function ghRequest(path, options) {
+    const token = getGhToken();
+    options = options || {};
+    return fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        ...(options.headers || {}),
+      },
+    });
+  }
+  async function pushLogsToCloud() {
+    if (!getGhToken()) return { ok: false, reason: "no-token" };
+    try {
+      let sha = null;
+      const getRes = await ghRequest(GH_PATH);
+      if (getRes.status === 200) {
+        sha = (await getRes.json()).sha;
+      } else if (getRes.status !== 404) {
+        return { ok: false, reason: `get-${getRes.status}` };
+      }
+      const body = {
+        message: `Sync logs ${new Date().toISOString()}`,
+        content: utf8ToBase64(JSON.stringify(getLogs(), null, 2)),
+      };
+      if (sha) body.sha = sha;
+      const putRes = await ghRequest(GH_PATH, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!putRes.ok) return { ok: false, reason: `put-${putRes.status}` };
+      localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: "network" };
+    }
+  }
+  async function pullLogsFromCloud() {
+    if (!getGhToken()) return { ok: false, reason: "no-token" };
+    try {
+      const getRes = await ghRequest(GH_PATH);
+      if (getRes.status === 404) return { ok: false, reason: "not-found" };
+      if (!getRes.ok) return { ok: false, reason: `get-${getRes.status}` };
+      const data = await getRes.json();
+      const logs = JSON.parse(base64ToUtf8(data.content));
+      localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
+      localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: "network" };
+    }
+  }
+
   // ---------- date helpers ----------
   function todayStr() {
     const d = new Date();
@@ -38,6 +113,9 @@
     const [y, m, d] = dateStr.split("-").map(Number);
     const date = new Date(y, m - 1, d);
     return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+  function formatDateTime(isoStr) {
+    return new Date(isoStr).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   }
   function escapeHtml(str) {
     const div = document.createElement("div");
@@ -90,6 +168,8 @@
       renderSchedule();
     } else if (route === "#/history") {
       renderHistory();
+    } else if (route === "#/settings") {
+      renderSettings();
     } else {
       renderToday();
     }
@@ -399,6 +479,82 @@
     bindCalendarNav();
   }
 
+  // ---------- Settings / cloud sync ----------
+  function renderSettings() {
+    const token = getGhToken();
+    const lastSynced = localStorage.getItem(LAST_SYNCED_KEY);
+
+    let html = `<a class="back-link" href="${window.__jwLastListRoute || "#/today"}">← Back</a>`;
+    html += `<h2 style="margin:10px 0 4px; font-size:20px;">Cloud Sync</h2>`;
+    html += `<p style="color:var(--text-muted); font-size:13px; margin-bottom:16px; line-height:1.5;">Back up your logs to a private GitHub repo so they survive a reinstall — and so Claude can see your data to help adjust the plan.</p>`;
+
+    html += `<div class="card">
+      <div class="field-row">
+        <label>GitHub Token</label>
+        <input type="password" id="gh-token-input" placeholder="${token ? "Saved — paste a new one to replace" : "Paste your token here"}" />
+      </div>
+      <button class="btn" id="save-token-btn">${token ? "Update Token" : "Save Token"}</button>
+      ${token ? '<button class="btn secondary" id="remove-token-btn">Remove Token</button>' : ""}
+    </div>`;
+
+    if (token) {
+      html += `<div class="card">
+        <p style="font-size:13px;">Status: <strong style="color:var(--accent);">Connected</strong></p>
+        <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">Last synced: ${lastSynced ? escapeHtml(formatDateTime(lastSynced)) : "Never"}</p>
+        <button class="btn" id="sync-now-btn">Sync Now</button>
+        <button class="btn secondary" id="restore-btn">Restore from Cloud</button>
+      </div>`;
+    }
+
+    html += `<div class="note-box">
+      <strong>How to get a token:</strong><br/>
+      1. On github.com: Settings → Developer settings → Personal access tokens → Fine-grained tokens<br/>
+      2. Generate new token<br/>
+      3. Repository access → Only select repositories → voltage-data<br/>
+      4. Permissions → Repository permissions → Contents → Read and write<br/>
+      5. Generate, copy it, and paste it above
+    </div>`;
+
+    appEl.innerHTML = html;
+
+    document.getElementById("save-token-btn").addEventListener("click", async () => {
+      const val = document.getElementById("gh-token-input").value.trim();
+      if (!val) return;
+      setGhToken(val);
+      showToast("Saving...");
+      const result = await pushLogsToCloud();
+      showToast(result.ok ? "Connected & synced" : "Saved — sync failed, check token");
+      renderSettings();
+    });
+
+    const removeBtn = document.getElementById("remove-token-btn");
+    if (removeBtn) {
+      removeBtn.addEventListener("click", () => {
+        setGhToken(null);
+        renderSettings();
+      });
+    }
+    const syncBtn = document.getElementById("sync-now-btn");
+    if (syncBtn) {
+      syncBtn.addEventListener("click", async () => {
+        showToast("Syncing...");
+        const result = await pushLogsToCloud();
+        showToast(result.ok ? "Synced" : "Sync failed");
+        renderSettings();
+      });
+    }
+    const restoreBtn = document.getElementById("restore-btn");
+    if (restoreBtn) {
+      restoreBtn.addEventListener("click", async () => {
+        if (!confirm("This replaces your local logs with the cloud backup. Continue?")) return;
+        showToast("Restoring...");
+        const result = await pullLogsFromCloud();
+        showToast(result.ok ? "Restored" : "Restore failed");
+        renderSettings();
+      });
+    }
+  }
+
   // ---------- Session detail ----------
   function renderSessionDetail(id) {
     const session = byId[id];
@@ -537,6 +693,7 @@
         const logs = getLogs();
         delete logs[id];
         localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
+        if (getGhToken()) pushLogsToCloud();
         render();
       });
     }
@@ -567,6 +724,7 @@
 
     saveLogEntry(session.id, entry);
     showToast("Saved");
+    if (getGhToken()) pushLogsToCloud();
     navigate(window.__jwLastListRoute || "#/today");
   }
 
