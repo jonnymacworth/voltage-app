@@ -32,6 +32,7 @@
   const GH_PATH = "logs.json";
   const GH_TOKEN_KEY = "jw_gh_token";
   const LAST_SYNCED_KEY = "jw_last_synced";
+  const LAST_SYNC_ERROR_KEY = "jw_last_sync_error";
 
   function getGhToken() {
     return localStorage.getItem(GH_TOKEN_KEY) || "";
@@ -39,6 +40,19 @@
   function setGhToken(token) {
     if (token) localStorage.setItem(GH_TOKEN_KEY, token);
     else localStorage.removeItem(GH_TOKEN_KEY);
+  }
+  function recordSyncError(msg) {
+    localStorage.setItem(LAST_SYNC_ERROR_KEY, JSON.stringify({ msg, at: new Date().toISOString() }));
+  }
+  function clearSyncError() {
+    localStorage.removeItem(LAST_SYNC_ERROR_KEY);
+  }
+  function getSyncError() {
+    try {
+      return JSON.parse(localStorage.getItem(LAST_SYNC_ERROR_KEY) || "null");
+    } catch (e) {
+      return null;
+    }
   }
   function utf8ToBase64(str) {
     return btoa(unescape(encodeURIComponent(str)));
@@ -66,6 +80,8 @@
       if (getRes.status === 200) {
         sha = (await getRes.json()).sha;
       } else if (getRes.status !== 404) {
+        const errBody = await getRes.text().catch(() => "");
+        recordSyncError(`GET ${getRes.status}: ${errBody.slice(0, 300)}`);
         return { ok: false, reason: `get-${getRes.status}` };
       }
       const body = {
@@ -78,10 +94,16 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!putRes.ok) return { ok: false, reason: `put-${putRes.status}` };
+      if (!putRes.ok) {
+        const errBody = await putRes.text().catch(() => "");
+        recordSyncError(`PUT ${putRes.status}: ${errBody.slice(0, 300)}`);
+        return { ok: false, reason: `put-${putRes.status}` };
+      }
       localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
+      clearSyncError();
       return { ok: true };
     } catch (e) {
+      recordSyncError(`Network error: ${e.message}`);
       return { ok: false, reason: "network" };
     }
   }
@@ -90,13 +112,19 @@
     try {
       const getRes = await ghRequest(GH_PATH);
       if (getRes.status === 404) return { ok: false, reason: "not-found" };
-      if (!getRes.ok) return { ok: false, reason: `get-${getRes.status}` };
+      if (!getRes.ok) {
+        const errBody = await getRes.text().catch(() => "");
+        recordSyncError(`GET ${getRes.status}: ${errBody.slice(0, 300)}`);
+        return { ok: false, reason: `get-${getRes.status}` };
+      }
       const data = await getRes.json();
       const logs = JSON.parse(base64ToUtf8(data.content));
       localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
       localStorage.setItem(LAST_SYNCED_KEY, new Date().toISOString());
+      clearSyncError();
       return { ok: true };
     } catch (e) {
+      recordSyncError(`Network error: ${e.message}`);
       return { ok: false, reason: "network" };
     }
   }
@@ -504,6 +532,14 @@
         <button class="btn" id="sync-now-btn">Sync Now</button>
         <button class="btn secondary" id="restore-btn">Restore from Cloud</button>
       </div>`;
+
+      const syncError = getSyncError();
+      if (syncError) {
+        html += `<div class="card" style="border-color: var(--danger);">
+          <p style="font-size:13px; font-weight:700; color: var(--danger);">Last sync error (${escapeHtml(formatDateTime(syncError.at))})</p>
+          <p style="font-size:12px; color:var(--text-muted); margin-top:6px; word-break:break-word; font-family: monospace;">${escapeHtml(syncError.msg)}</p>
+        </div>`;
+      }
     }
 
     html += `<div class="note-box">
