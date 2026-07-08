@@ -545,7 +545,7 @@
 
     html += `<h2 style="margin:10px 0 4px; font-size:20px;">App Updates</h2>`;
     html += `<div class="card">
-      <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">If you just updated the app but it looks the same, your phone is showing a cached copy. Hard refresh clears that cache and reloads the latest version. If Cloud Sync is connected, your logs are backed up to GitHub first as a safety net.</p>
+      <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">If you just updated the app but it looks the same, your phone is showing a cached copy. Hard refresh checks for the newest version and switches to it — it doesn't clear your saved token or logs. If Cloud Sync is connected, your logs are also backed up to GitHub first as an extra safety net.</p>
       <button class="btn secondary" id="hard-refresh-btn">Hard Refresh</button>
     </div>`;
 
@@ -892,12 +892,11 @@
   }
 
   async function hardRefresh() {
-    if (!confirm("This reloads the newest version of the app. If you're connected to Cloud Sync, your logs will be backed up to GitHub first as a safety net. Continue?")) {
+    if (!confirm("This checks for the newest version of the app and reloads. If you're connected to Cloud Sync, your logs are backed up to GitHub first as an extra safety net. Continue?")) {
       return;
     }
 
-    // Safety net: push current logs to GitHub before touching any local
-    // storage, in case clearing site data on this device misbehaves.
+    // Safety net: back up logs before doing anything else, just in case.
     if (getGhToken()) {
       try {
         await pushLogsToCloud();
@@ -906,19 +905,36 @@
       }
     }
 
-    try {
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-      if ("serviceWorker" in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister()));
-      }
-    } catch (e) {
-      // best-effort — still reload below even if clearing failed
+    // Deliberately does NOT call caches.delete() or unregister() — a manual
+    // clear like that previously wiped localStorage (token + logs) on iOS.
+    // Instead, ask the existing service worker to check for a new version
+    // (bypassing the browser's normal once-a-day check throttle) and wait
+    // for it to take control before reloading. The SW's own activate
+    // handler already cleans up its stale Cache Storage entries safely.
+    if (!("serviceWorker" in navigator)) {
+      window.location.reload();
+      return;
     }
-    window.location.reload();
+
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        window.location.reload();
+        return;
+      }
+      let reloaded = false;
+      const doReload = () => {
+        if (reloaded) return;
+        reloaded = true;
+        window.location.reload();
+      };
+      navigator.serviceWorker.addEventListener("controllerchange", doReload, { once: true });
+      await reg.update();
+      // Fallback in case there was nothing new to install (already current).
+      setTimeout(doReload, 2000);
+    } catch (e) {
+      window.location.reload();
+    }
   }
 
   function showToast(msg) {
