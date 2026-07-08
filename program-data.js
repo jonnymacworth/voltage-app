@@ -118,7 +118,7 @@ function tempoWorkoutForWeek(week) {
 
 // week -> { mon, tue, thu, sun date strings (YYYY-MM-DD), sunMiles, sunNote }
 const CALENDAR = [
-  { week: 1, mon: "2026-07-06", tue: "2026-07-07", thu: "2026-07-09", sun: "2026-07-12", sunMiles: 5, sunNote: "" },
+  { week: 1, mon: null, tue: "2026-07-07", thu: "2026-07-09", sun: "2026-07-12", sunMiles: 5, sunNote: "" },
   { week: 2, mon: "2026-07-13", tue: "2026-07-14", thu: "2026-07-16", sun: "2026-07-19", sunMiles: 6, sunNote: "" },
   { week: 3, mon: "2026-07-20", tue: "2026-07-21", thu: "2026-07-23", sun: "2026-07-26", sunMiles: 7, sunNote: "" },
   { week: 4, mon: "2026-07-27", tue: "2026-07-28", thu: "2026-07-30", sun: "2026-08-02", sunMiles: 5, sunNote: "deload" },
@@ -145,23 +145,25 @@ function buildSessions() {
     const variant = LIFT_VARIANT_BY_WEEK[wk.week];
     const isDeloadLift = variant === 4;
 
-    // Monday — Lift A
-    const liftA = LIFT_A[variant];
-    sessions.push({
-      id: `w${wk.week}-mon`,
-      week: wk.week,
-      date: wk.mon,
-      day: "Monday",
-      type: "lift",
-      title: liftA.label,
-      note: liftA.note || (isDeloadLift ? "Deload week" : ""),
-      warmup: WARMUP_FLOW,
-      warmupExtra: null,
-      exercises: liftA.exercises,
-      coreFinisher: coreFinisherForSession(wk.week, 0),
-      coreFinisherExtra: isDeloadLift,
-      conditioning: null,
-    });
+    // Monday — Lift A (skipped in week 1 — program effectively started Tue Jul 7, 2026)
+    if (wk.mon) {
+      const liftA = LIFT_A[variant];
+      sessions.push({
+        id: `w${wk.week}-mon`,
+        week: wk.week,
+        date: wk.mon,
+        day: "Monday",
+        type: "lift",
+        title: liftA.label,
+        note: liftA.note || (isDeloadLift ? "Deload week" : ""),
+        warmup: WARMUP_FLOW,
+        warmupExtra: null,
+        exercises: liftA.exercises,
+        coreFinisher: coreFinisherForSession(wk.week, 0),
+        coreFinisherExtra: isDeloadLift,
+        conditioning: null,
+      });
+    }
 
     // Tuesday — Tempo/Speed
     const tempo = tempoWorkoutForWeek(wk.week);
