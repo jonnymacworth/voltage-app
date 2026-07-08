@@ -72,21 +72,40 @@
       },
     });
   }
-  async function pushLogsToCloud() {
+  async function pushLogsToCloud(options) {
+    options = options || {};
     if (!getGhToken()) return { ok: false, reason: "no-token" };
     try {
       let sha = null;
+      let remoteLogs = null;
       const getRes = await ghRequest(GH_PATH);
       if (getRes.status === 200) {
-        sha = (await getRes.json()).sha;
+        const data = await getRes.json();
+        sha = data.sha;
+        try {
+          remoteLogs = JSON.parse(base64ToUtf8(data.content));
+        } catch (e) {
+          remoteLogs = null;
+        }
       } else if (getRes.status !== 404) {
         const errBody = await getRes.text().catch(() => "");
         recordSyncError(`GET ${getRes.status}: ${errBody.slice(0, 300)}`);
         return { ok: false, reason: `get-${getRes.status}` };
       }
+
+      // Guard rail: never silently overwrite a non-empty cloud backup with
+      // empty local logs — that's almost always an accident (e.g. logs got
+      // cleared locally and the user meant to Restore, not Sync).
+      const localLogs = getLogs();
+      const localEmpty = Object.keys(localLogs).length === 0;
+      const remoteHasData = remoteLogs && Object.keys(remoteLogs).length > 0;
+      if (!options.force && localEmpty && remoteHasData) {
+        return { ok: false, reason: "would-erase-remote" };
+      }
+
       const body = {
         message: `Sync logs ${new Date().toISOString()}`,
-        content: utf8ToBase64(JSON.stringify(getLogs(), null, 2)),
+        content: utf8ToBase64(JSON.stringify(localLogs, null, 2)),
       };
       if (sha) body.sha = sha;
       const putRes = await ghRequest(GH_PATH, {
@@ -106,6 +125,16 @@
       recordSyncError(`Network error: ${e.message}`);
       return { ok: false, reason: "network" };
     }
+  }
+  async function handlePushResult(result) {
+    if (result.reason === "would-erase-remote") {
+      const proceed = confirm(
+        'Your local logs are empty, but the cloud backup has data. Syncing now would erase that backup.\n\nTap Cancel and use "Restore from Cloud" instead to pull your data back down. Only continue if you actually want to replace the cloud backup with empty logs.'
+      );
+      if (!proceed) return { ok: false, reason: "cancelled" };
+      return await pushLogsToCloud({ force: true });
+    }
+    return result;
   }
   async function pullLogsFromCloud() {
     if (!getGhToken()) return { ok: false, reason: "no-token" };
@@ -513,7 +542,14 @@
     const lastSynced = localStorage.getItem(LAST_SYNCED_KEY);
 
     let html = `<a class="back-link" href="${window.__jwLastListRoute || "#/today"}">← Back</a>`;
-    html += `<h2 style="margin:10px 0 4px; font-size:20px;">Cloud Sync</h2>`;
+
+    html += `<h2 style="margin:10px 0 4px; font-size:20px;">App Updates</h2>`;
+    html += `<div class="card">
+      <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">If you just updated the app but it looks the same, your phone is showing a cached copy. Hard refresh clears that cache and reloads the latest version. If Cloud Sync is connected, your logs are backed up to GitHub first as a safety net.</p>
+      <button class="btn secondary" id="hard-refresh-btn">Hard Refresh</button>
+    </div>`;
+
+    html += `<h2 style="margin:20px 0 4px; font-size:20px;">Cloud Sync</h2>`;
     html += `<p style="color:var(--text-muted); font-size:13px; margin-bottom:16px; line-height:1.5;">Back up your logs to a private GitHub repo so they survive a reinstall — and so Claude can see your data to help adjust the plan.</p>`;
 
     html += `<div class="card">
@@ -553,13 +589,21 @@
 
     appEl.innerHTML = html;
 
+    document.getElementById("hard-refresh-btn").addEventListener("click", async () => {
+      showToast("Clearing cache...");
+      await hardRefresh();
+    });
+
     document.getElementById("save-token-btn").addEventListener("click", async () => {
       const val = document.getElementById("gh-token-input").value.trim();
       if (!val) return;
       setGhToken(val);
-      showToast("Saving...");
-      const result = await pushLogsToCloud();
-      showToast(result.ok ? "Connected & synced" : "Saved — sync failed, check token");
+      showToast("Connecting...");
+      let result = await pushLogsToCloud();
+      result = await handlePushResult(result);
+      showToast(
+        result.ok ? "Connected & synced" : result.reason === "cancelled" ? "Connected — sync skipped" : "Saved — sync failed, check token"
+      );
       renderSettings();
     });
 
@@ -574,8 +618,9 @@
     if (syncBtn) {
       syncBtn.addEventListener("click", async () => {
         showToast("Syncing...");
-        const result = await pushLogsToCloud();
-        showToast(result.ok ? "Synced" : "Sync failed");
+        let result = await pushLogsToCloud();
+        result = await handlePushResult(result);
+        showToast(result.ok ? "Synced" : result.reason === "cancelled" ? "Sync skipped" : "Sync failed");
         renderSettings();
       });
     }
@@ -589,6 +634,63 @@
         renderSettings();
       });
     }
+  }
+
+  // ---------- Set checkboxes ----------
+  function parseSets(detail) {
+    if (!detail) return 1;
+    let m = detail.match(/^(\d+)\s*[x×]\s*\d+/i);
+    if (m) return Math.max(1, parseInt(m[1], 10));
+    m = detail.match(/(\d+)\s*rounds?/i);
+    if (m) return Math.max(1, parseInt(m[1], 10));
+    return 1;
+  }
+  function getSavedSets(saved, numSets) {
+    if (saved && Array.isArray(saved.sets)) {
+      const sets = saved.sets.slice(0, numSets);
+      while (sets.length < numSets) sets.push(false);
+      return sets;
+    }
+    if (saved && saved.done) return new Array(numSets).fill(true);
+    return new Array(numSets).fill(false);
+  }
+  function isAllChecked(savedSets, numSets) {
+    return numSets > 0 && savedSets.length === numSets && savedSets.every(Boolean);
+  }
+  function setChecksHtml(prefix, numSets, savedSets) {
+    let html = `<div class="set-checks">`;
+    for (let s = 0; s < numSets; s++) {
+      const checked = savedSets[s] ? "checked" : "";
+      html += `
+        <label class="set-check">
+          <input type="checkbox" class="set-checkbox" data-prefix="${prefix}" data-set="${s}" ${checked} />
+          <span>Set ${s + 1}</span>
+        </label>
+      `;
+    }
+    html += `</div>`;
+    return html;
+  }
+  function updateExerciseStatus(prefix) {
+    const checkboxes = document.querySelectorAll(`.set-checkbox[data-prefix="${prefix}"]`);
+    const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every((cb) => cb.checked);
+    const card = document.getElementById(`${prefix}-card`);
+    const status = document.getElementById(`${prefix}-status`);
+    if (card) card.classList.toggle("complete", allChecked);
+    if (status) status.textContent = allChecked ? "✓" : "";
+  }
+  function bindSetCheckboxes() {
+    document.querySelectorAll(".set-checkbox").forEach((cb) => {
+      cb.addEventListener("change", () => updateExerciseStatus(cb.dataset.prefix));
+    });
+  }
+  function getSetsFromDom(prefix, numSets) {
+    const sets = [];
+    for (let s = 0; s < numSets; s++) {
+      const cb = document.querySelector(`.set-checkbox[data-prefix="${prefix}"][data-set="${s}"]`);
+      sets.push(!!(cb && cb.checked));
+    }
+    return sets;
   }
 
   // ---------- Session detail ----------
@@ -624,47 +726,60 @@
       html += `<div class="section-label">Exercises</div>`;
       session.exercises.forEach((ex, i) => {
         const saved = log && log.exercises && log.exercises[i] ? log.exercises[i] : {};
+        const numSets = parseSets(ex.detail);
+        const savedSets = getSavedSets(saved, numSets);
+        const complete = isAllChecked(savedSets, numSets);
+        const prefix = `ex-${i}`;
         html += `
-          <div class="exercise">
+          <div class="exercise ${complete ? "complete" : ""}" id="${prefix}-card">
             <div class="exercise-head">
-              <input type="checkbox" id="ex-${i}-done" ${saved.done ? "checked" : ""} />
+              <div class="exercise-status" id="${prefix}-status">${complete ? "✓" : ""}</div>
               <div>
                 <div class="exercise-name">${escapeHtml(ex.name)}</div>
                 <div class="exercise-detail">${escapeHtml(ex.detail)}</div>
               </div>
             </div>
+            ${setChecksHtml(prefix, numSets, savedSets)}
             <div class="exercise-fields">
-              <input type="text" id="ex-${i}-weight" placeholder="Weight used" value="${escapeHtml(saved.weight || "")}" />
-              <input type="text" id="ex-${i}-notes" placeholder="Notes" value="${escapeHtml(saved.notes || "")}" />
+              <input type="text" id="${prefix}-weight" placeholder="Weight used" value="${escapeHtml(saved.weight || "")}" />
+              <input type="text" id="${prefix}-notes" placeholder="Notes" value="${escapeHtml(saved.notes || "")}" />
             </div>
           </div>
         `;
       });
 
       const coreSaved = (log && log.core) || {};
+      const coreNumSets = parseSets(session.coreFinisher.detail);
+      const coreSavedSets = getSavedSets(coreSaved, coreNumSets);
+      const coreComplete = isAllChecked(coreSavedSets, coreNumSets);
       html += `
-        <div class="exercise">
+        <div class="exercise ${coreComplete ? "complete" : ""}" id="core-card">
           <div class="exercise-head">
-            <input type="checkbox" id="core-done" ${coreSaved.done ? "checked" : ""} />
+            <div class="exercise-status" id="core-status">${coreComplete ? "✓" : ""}</div>
             <div>
               <div class="exercise-name">Core Finisher: ${escapeHtml(session.coreFinisher.name)}</div>
               <div class="exercise-detail">${escapeHtml(session.coreFinisher.detail)}${session.coreFinisherExtra ? " · extra time on mobility this week" : ""} · 3 rounds</div>
             </div>
           </div>
+          ${setChecksHtml("core", coreNumSets, coreSavedSets)}
         </div>
       `;
 
       if (session.conditioning) {
         const condSaved = (log && log.conditioning) || {};
+        const condNumSets = parseSets(session.conditioning.detail);
+        const condSavedSets = getSavedSets(condSaved, condNumSets);
+        const condComplete = isAllChecked(condSavedSets, condNumSets);
         html += `
-          <div class="exercise">
+          <div class="exercise ${condComplete ? "complete" : ""}" id="cond-card">
             <div class="exercise-head">
-              <input type="checkbox" id="cond-done" ${condSaved.done ? "checked" : ""} />
+              <div class="exercise-status" id="cond-status">${condComplete ? "✓" : ""}</div>
               <div>
                 <div class="exercise-name">${escapeHtml(session.conditioning.name)} (optional)</div>
                 <div class="exercise-detail">${escapeHtml(session.conditioning.detail)}</div>
               </div>
             </div>
+            ${setChecksHtml("cond", condNumSets, condSavedSets)}
           </div>
         `;
       }
@@ -718,6 +833,8 @@
 
     appEl.innerHTML = html;
 
+    bindSetCheckboxes();
+
     const rpeInput = document.getElementById("rpe");
     const rpeDisplay = document.getElementById("rpe-display");
     rpeInput.addEventListener("input", () => (rpeDisplay.textContent = rpeInput.value));
@@ -744,15 +861,25 @@
     };
 
     if (session.type === "lift") {
-      entry.exercises = session.exercises.map((ex, i) => ({
-        name: ex.name,
-        done: document.getElementById(`ex-${i}-done`).checked,
-        weight: document.getElementById(`ex-${i}-weight`).value.trim(),
-        notes: document.getElementById(`ex-${i}-notes`).value.trim(),
-      }));
-      entry.core = { done: document.getElementById("core-done").checked };
-      const condCheckbox = document.getElementById("cond-done");
-      if (condCheckbox) entry.conditioning = { done: condCheckbox.checked };
+      entry.exercises = session.exercises.map((ex, i) => {
+        const numSets = parseSets(ex.detail);
+        const sets = getSetsFromDom(`ex-${i}`, numSets);
+        return {
+          name: ex.name,
+          sets,
+          done: isAllChecked(sets, numSets),
+          weight: document.getElementById(`ex-${i}-weight`).value.trim(),
+          notes: document.getElementById(`ex-${i}-notes`).value.trim(),
+        };
+      });
+      const coreNumSets = parseSets(session.coreFinisher.detail);
+      const coreSets = getSetsFromDom("core", coreNumSets);
+      entry.core = { sets: coreSets, done: isAllChecked(coreSets, coreNumSets) };
+      if (session.conditioning) {
+        const condNumSets = parseSets(session.conditioning.detail);
+        const condSets = getSetsFromDom("cond", condNumSets);
+        entry.conditioning = { sets: condSets, done: isAllChecked(condSets, condNumSets) };
+      }
     } else {
       entry.distance = document.getElementById("run-distance").value.trim();
       entry.time = document.getElementById("run-time").value.trim();
@@ -762,6 +889,36 @@
     showToast("Saved");
     if (getGhToken()) pushLogsToCloud();
     navigate(window.__jwLastListRoute || "#/today");
+  }
+
+  async function hardRefresh() {
+    if (!confirm("This reloads the newest version of the app. If you're connected to Cloud Sync, your logs will be backed up to GitHub first as a safety net. Continue?")) {
+      return;
+    }
+
+    // Safety net: push current logs to GitHub before touching any local
+    // storage, in case clearing site data on this device misbehaves.
+    if (getGhToken()) {
+      try {
+        await pushLogsToCloud();
+      } catch (e) {
+        // ignore — proceed either way, this is best-effort
+      }
+    }
+
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch (e) {
+      // best-effort — still reload below even if clearing failed
+    }
+    window.location.reload();
   }
 
   function showToast(msg) {

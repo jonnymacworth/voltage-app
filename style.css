@@ -265,14 +265,49 @@ h1, h2, h3, p { margin: 0; }
   align-items: flex-start;
   gap: 10px;
 }
-.exercise-head input[type="checkbox"] {
+.exercise-status {
   width: 24px; height: 24px;
   margin-top: 2px;
-  accent-color: var(--accent);
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--card-alt);
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--accent-ink);
 }
+.exercise.complete { border-color: var(--accent); background: var(--accent-soft); }
+.exercise.complete .exercise-status { background: var(--accent); border-color: var(--accent); }
 .exercise-name { font-weight: 700; font-size: 15px; }
 .exercise-detail { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.set-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.set-check {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.set-check input[type="checkbox"] {
+  width: 28px; height: 28px;
+  accent-color: var(--accent);
+}
+.set-check span {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
 .exercise-fields {
   margin-top: 10px;
   display: flex;
