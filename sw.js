@@ -1,10 +1,10 @@
-const CACHE_NAME = "jw-cache-v17";
+const CACHE_NAME = "jw-cache-v18";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css?v=7",
   "./app.js?v=11",
-  "./program-data.js?v=6",
+  "./program-data.js?v=7",
   "./manifest.json",
   "./icons/icon-192.png?v=2",
   "./icons/icon-512.png?v=2",

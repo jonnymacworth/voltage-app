@@ -28,9 +28,9 @@ const LIFT_A = {
     label: "Lift A1 — Front Squat Focus",
     exercises: [
       { name: "Front Squat (clean grip, from floor)", detail: "4 x 6, moderate load, brace hard, upright torso" },
-      { name: "Kettlebell Floor Press", detail: "4 x 8" },
+      { name: "Single-Arm Kettlebell Floor Press", detail: "4 x 8/side, alternate arms" },
       { name: "Kettlebell Single-Arm Row", detail: "3 x 10/side" },
-      { name: "Kettlebell Front-Rack Carry", detail: "3 x 30–40 yd" },
+      { name: "Kettlebell Front-Rack Carry (single arm)", detail: "3 x 30–40 yd/side, switch arms" },
     ],
   },
   2: {
@@ -39,13 +39,13 @@ const LIFT_A = {
       { name: "Kettlebell Goblet Squat", detail: "4 x 10" },
       { name: "Push-Up", detail: "4 x 10–15 (elevate feet or slow the tempo down as it gets easier)" },
       { name: "Bulgarian Split Squat (rear foot elevated)", detail: "3 x 8/side" },
-      { name: "Kettlebell Renegade Row", detail: "3 x 8/side" },
+      { name: "Kettlebell Single-Arm Row (bent-over stance)", detail: "3 x 8/side" },
     ],
   },
   3: {
-    label: "Lift A3 — Zercher Squat / Press Focus",
+    label: "Lift A3 — Front Squat (Higher Rep) / Press Focus",
     exercises: [
-      { name: "Zercher Squat (barbell in elbow crease)", detail: "4 x 6, keep torso upright" },
+      { name: "Front Squat (clean grip, from floor)", detail: "4 x 8, lighter than A1, upright torso" },
       { name: "Barbell Floor Press", detail: "4 x 6" },
       { name: "Bent-Over Barbell Row", detail: "3 x 8" },
       { name: "Walking Lunges", detail: "3 x 10/side" },
@@ -69,7 +69,7 @@ const LIFT_B = {
     warmupExtra: "2 light kettlebell deadlifts to groove the hinge",
     exercises: [
       { name: "Romanian Deadlift (barbell, floor start)", detail: "4 x 6 — stop above the knee if the low back complains" },
-      { name: "Kettlebell Floor Press", detail: "4 x 8" },
+      { name: "Barbell Floor Press", detail: "4 x 6" },
       { name: "Kettlebell Swings", detail: "3 x 15 (swap for Glute Bridge x15 if swings bother the back)" },
       { name: "Farmer Carry, both kettlebells", detail: "3 x 40 yd" },
     ],
