@@ -37,16 +37,16 @@ const LIFT_A = {
     label: "Lift A2 — Goblet Squat / Unilateral Focus",
     exercises: [
       { name: "Kettlebell Goblet Squat", detail: "4 x 10" },
-      { name: "Barbell Push Press (clean to shoulders, then push press)", detail: "4 x 6" },
+      { name: "Push-Up", detail: "4 x 10–15 (elevate feet or slow the tempo down as it gets easier)" },
       { name: "Bulgarian Split Squat (rear foot elevated)", detail: "3 x 8/side" },
       { name: "Kettlebell Renegade Row", detail: "3 x 8/side" },
     ],
   },
   3: {
-    label: "Lift A3 — Zercher Squat / Overhead Focus",
+    label: "Lift A3 — Zercher Squat / Press Focus",
     exercises: [
       { name: "Zercher Squat (barbell in elbow crease)", detail: "4 x 6, keep torso upright" },
-      { name: "Barbell Strict Press (clean to shoulders, then press overhead)", detail: "4 x 6" },
+      { name: "Barbell Floor Press", detail: "4 x 6" },
       { name: "Bent-Over Barbell Row", detail: "3 x 8" },
       { name: "Walking Lunges", detail: "3 x 10/side" },
     ],
@@ -69,7 +69,7 @@ const LIFT_B = {
     warmupExtra: "2 light kettlebell deadlifts to groove the hinge",
     exercises: [
       { name: "Romanian Deadlift (barbell, floor start)", detail: "4 x 6 — stop above the knee if the low back complains" },
-      { name: "Kettlebell/Barbell Push Press", detail: "4 x 6" },
+      { name: "Kettlebell Floor Press", detail: "4 x 8" },
       { name: "Kettlebell Swings", detail: "3 x 15 (swap for Glute Bridge x15 if swings bother the back)" },
       { name: "Farmer Carry, both kettlebells", detail: "3 x 40 yd" },
     ],
@@ -91,7 +91,7 @@ const LIFT_B = {
     warmupExtra: "hip hinge drill",
     exercises: [
       { name: "Barbell Deadlift (conventional, from floor)", detail: "4 x 5, moderate load, strict form" },
-      { name: "Kettlebell Clean & Press", detail: "3 x 8/side" },
+      { name: "Single-Arm Kettlebell Floor Press", detail: "3 x 8/side" },
       { name: "Glute Bridge / Hip Thrust", detail: "3 x 12" },
       { name: "Farmer Carry, both kettlebells", detail: "3 x 40 yd" },
     ],
